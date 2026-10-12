@@ -330,6 +330,39 @@
     return pyRound(Math.min(100, score), 1);
   }
 
+  /* 判读基准阈值（对应 2000 字整章的标定值） */
+  var VERDICT_BASE = [20.0, 40.0, 60.0];
+  var REF_CHARS = 2000;
+
+  /** 按文本长度缩放判读阈值，返回 [verdict, 缩放系数]。
+   *
+   *  分数是绝对命中加权，同样浓度下短文本命中少、分数天然偏低。
+   *  C-ReD（ACL 2026）受控实验：同一批语料只改长度，300 字样本的 AI
+   *  中位分 11.8、2000 字样本 25.0 —— 排序能力一直很强（AUC 0.73-0.97），
+   *  失效的只是固定的绝对阈值。
+   *
+   *  缩放取 sqrt(n/2000)，下界 0.55。
+   *  下界为何是 0.55 而非更低：在真人网文上标定（_eval_target_domain.py）。
+   *  下界 0.30 时 300 字段落误报率 13.6%；提到 0.55 后回到 0%，
+   *  而 395 字的 AI 样本仍判「重度」—— 信号本就充足，压阈值只引入误报。
+   *
+   *  必须与 src/detector.py 的 verdict_for 保持一致，否则 parity 会报红。
+   */
+  function verdictFor(score, charCount) {
+    var f;
+    if (charCount <= 0) {
+      f = 0.55;
+    } else {
+      f = Math.sqrt(charCount / REF_CHARS);
+      f = Math.min(1.0, Math.max(0.55, f));
+    }
+    var t1 = VERDICT_BASE[0] * f, t2 = VERDICT_BASE[1] * f, t3 = VERDICT_BASE[2] * f;
+    if (score < t1) return ['人味较足', f];
+    if (score < t2) return ['轻度 AI 味', f];
+    if (score < t3) return ['明显 AI 味', f];
+    return ['重度 AI 味', f];
+  }
+
   function verdictOf(score) {
     if (score < 20) return '人味较足';
     if (score < 40) return '轻度 AI 味';
@@ -351,7 +384,11 @@
 
     var metrics = computeMetrics(text);
     var score = computeScore(findings, metrics);
-    return { findings: findings, metrics: metrics, score: score, verdict: verdictOf(score) };
+    var v = verdictFor(score, charCount(text));
+    return {
+      findings: findings, metrics: metrics, score: score,
+      verdict: v[0], verdictFactor: v[1]
+    };
   }
 
   return {
@@ -360,6 +397,7 @@
     extractDialogueSpans: extractDialogueSpans,
     computeMetrics: computeMetrics,
     computeScore: computeScore,
+    verdictFor: verdictFor,
     pyRound: pyRound,
     pstdev: pstdev
   };

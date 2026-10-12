@@ -199,14 +199,21 @@
     var f = r.findings, m = r.metrics;
 
     $('score').innerHTML = r.score + '<small>/100</small>';
-    var color = r.score < 20 ? 'var(--ok)' : r.score < 40 ? '#a3e635'
-              : r.score < 60 ? 'var(--p1)' : 'var(--p0)';
+    // 颜色档位必须跟引擎的自适应阈值走，否则颜色和判读文字会互相矛盾
+    var vf = r.verdictFactor === undefined ? 1 : r.verdictFactor;
+    var color = r.score < 20 * vf ? 'var(--ok)'
+              : r.score < 40 * vf ? '#a3e635'
+              : r.score < 60 * vf ? 'var(--p1)' : 'var(--p0)';
     $('score').style.color = color;
     $('verdict').textContent = r.verdict;
     $('verdict').style.color = color;
+    // 分数条按缩放后的阈值画刻度，让「重度」区的位置与实际判读一致
     $('marker').style.left = Math.max(0, Math.min(100, r.score)) + '%';
     $('hint').textContent = '共命中 ' + f.length + ' 处，用时 ' + ms + ' ms。'
-      + (r.score >= 40 ? '建议按下面清单逐条处理后再发。' : '整体节奏不错，按清单微调即可。');
+      + (r.score >= 40 * vf ? '建议按下面清单逐条处理后再发。'
+                            : '整体节奏不错，按清单微调即可。')
+      + (vf < 1 ? '（当前文本 ' + m.sentence_count + ' 句，判读阈值已按长度缩放至 '
+                  + Math.round(vf * 100) + '%）' : '');
 
     var mrows = [
       ['句数 / 平均句长', m.sentence_count + ' 句 / ' + m.avg_sentence_len + ' 字'],
