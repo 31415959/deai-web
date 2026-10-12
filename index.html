@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AI 味体检 · 网文去味检测器</title>
+<meta name="description" content="免费网文 AI 味检测：粘贴正文，得到 0-100 评分 + 逐处定位 + 可直接用的去味改写 Prompt。纯本地运行，不上传服务器。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23818cf8'/%3E%3Ctext x='50' y='68' font-size='54' text-anchor='middle' fill='%230b0f1a' font-family='sans-serif' font-weight='bold'%3EAI%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b0f1a; --panel:#141a29; --panel2:#1b2333; --line:#26304a;
+    --fg:#e2e8f0; --dim:#8b9ab3; --dim2:#64748b;
+    --p0:#f87171; --p1:#fbbf24; --p2:#60a5fa; --ok:#34d399;
+    --accent:#818cf8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--fg);
+    font-family:system-ui,-apple-system,"Microsoft YaHei","PingFang SC",sans-serif;
+    -webkit-text-size-adjust:100%;line-height:1.65}
+  body{padding:0 0 60px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 18px}
+
+  header{padding:34px 0 22px;text-align:center}
+  h1{font-size:23px;letter-spacing:.5px;font-weight:600}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--dim2);font-size:13px;margin-top:8px}
+  .badge{display:inline-block;margin-top:12px;padding:3px 10px;border-radius:20px;
+    background:rgba(52,211,153,.12);color:var(--ok);font-size:12px;border:1px solid rgba(52,211,153,.25)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:18px;margin-bottom:16px}
+
+  textarea{width:100%;min-height:210px;background:var(--panel2);color:var(--fg);
+    border:1px solid var(--line);border-radius:10px;padding:14px;font-size:15px;
+    line-height:1.8;resize:vertical;font-family:inherit;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  textarea::placeholder{color:var(--dim2)}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  button{cursor:pointer;border:none;border-radius:9px;padding:11px 20px;
+    font-size:14px;font-weight:600;font-family:inherit;transition:.15s}
+  .btn-main{background:var(--accent);color:#0b0f1a}
+  .btn-main:hover{filter:brightness(1.12)}
+  .btn-main:disabled{opacity:.5;cursor:default}
+  .btn-ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}
+  .btn-ghost:hover{color:var(--fg);border-color:var(--dim2)}
+  .count{color:var(--dim2);font-size:12px;margin-left:auto}
+
+  /* 评分卡 —— 截图分享的主体 */
+  #result{display:none}
+  .scorecard{text-align:center;padding:26px 18px;
+    background:linear-gradient(160deg,#161e30,#131a28);
+    border:1px solid var(--line);border-radius:14px;margin-bottom:16px}
+  .score-num{font-size:64px;font-weight:700;line-height:1;letter-spacing:-2px}
+  .score-num small{font-size:20px;color:var(--dim2);font-weight:400;letter-spacing:0}
+  .verdict{font-size:17px;margin-top:10px;font-weight:600}
+  .scale{height:6px;border-radius:4px;margin:18px auto 8px;max-width:420px;
+    background:linear-gradient(90deg,var(--ok),#a3e635,var(--p1),var(--p0))}
+  .scale-wrap{position:relative;max-width:420px;margin:0 auto}
+  .marker{position:absolute;top:-5px;width:3px;height:16px;background:#fff;
+    border-radius:2px;transform:translateX(-50%);box-shadow:0 0 6px rgba(255,255,255,.7)}
+  .scale-lbl{display:flex;justify-content:space-between;max-width:420px;
+    margin:0 auto;color:var(--dim2);font-size:11px}
+  .hint{color:var(--dim);font-size:13px;margin-top:14px;padding-top:14px;
+    border-top:1px solid var(--line)}
+
+  h2{font-size:15px;margin:22px 0 12px;color:var(--fg);font-weight:600;
+    display:flex;align-items:center;gap:8px}
+  h2 .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td{padding:6px 0;border-bottom:1px solid rgba(38,48,74,.5);color:var(--dim)}
+  td:last-child{text-align:right;color:var(--fg);font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  .warn{color:var(--p1) !important}
+
+  .find{padding:11px 13px;background:var(--panel2);border-radius:9px;
+    margin-bottom:8px;border-left:3px solid var(--line);font-size:13px}
+  .find.p0{border-left-color:var(--p0)}
+  .find.p1{border-left-color:var(--p1)}
+  .find.p2{border-left-color:var(--p2)}
+  .find .cat{font-size:11px;color:var(--dim2);margin-bottom:3px}
+  .find .txt{color:var(--fg);word-break:break-all}
+  .find .sug{color:var(--dim);font-size:12px;margin-top:4px}
+  .more{color:var(--dim2);font-size:12px;text-align:center;padding:6px}
+
+  pre{background:#0d1220;border:1px solid var(--line);border-radius:10px;
+    padding:14px;overflow:auto;font-size:12px;line-height:1.7;color:#c7d2e5;
+    max-height:340px;white-space:pre-wrap;word-break:break-word;
+    font-family:ui-monospace,Consolas,monospace}
+  .copy-ok{color:var(--ok);font-size:12px;margin-left:10px;opacity:0;transition:.2s}
+  .copy-ok.show{opacity:1}
+
+  footer{text-align:center;color:var(--dim2);font-size:12px;
+    margin-top:34px;padding-top:20px;border-top:1px solid var(--line)}
+  footer b{color:var(--dim)}
+  .err{color:var(--p0);font-size:13px;margin-top:10px}
+  @media(max-width:520px){
+    .score-num{font-size:52px}
+    h1{font-size:20px}
+    .wrap{padding:0 14px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>AI 味<span>体检</span></h1>
+    <div class="sub">粘贴网文正文 → 评分 + 逐处定位 + 去味改写 Prompt</div>
+    <div class="badge">纯本地运行 · 不上传服务器</div>
+  </header>
+
+  <div class="panel">
+    <textarea id="input" placeholder="把要检查的正文粘到这里……&#10;&#10;（建议一次 1-3 章，太短统计指标不准）"></textarea>
+    <div class="row">
+      <button class="btn-main" id="btn">开始体检</button>
+      <button class="btn-ghost" id="btn-demo">看示例</button>
+      <button class="btn-ghost" id="btn-clear">清空</button>
+      <span class="count" id="count">0 字</span>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="result">
+    <div class="scorecard">
+      <div class="score-num" id="score">0<small>/100</small></div>
+      <div class="verdict" id="verdict"></div>
+      <div class="scale-wrap">
+        <div class="scale"></div>
+        <div class="marker" id="marker"></div>
+      </div>
+      <div class="scale-lbl"><span>人味足</span><span>轻度</span><span>明显</span><span>重度</span></div>
+      <div class="hint" id="hint"></div>
+    </div>
+
+    <h2><span class="dot" style="background:var(--accent)"></span>统计指标</h2>
+    <div class="panel"><table id="metrics"></table></div>
+
+    <div id="findings"></div>
+
+    <h2><span class="dot" style="background:var(--ok)"></span>去味改写 Prompt
+      <span style="color:var(--dim2);font-weight:400;font-size:12px">— 复制给任意 AI 执行改写</span>
+    </h2>
+    <div class="panel">
+      <div class="row" style="margin:0 0 12px">
+        <button class="btn-main" id="btn-copy" style="padding:8px 16px;font-size:13px">复制 Prompt</button>
+        <span class="copy-ok" id="copied">已复制 ✓</span>
+      </div>
+      <pre id="prompt"></pre>
+    </div>
+  </div>
+
+  <footer>
+    <b>说明</b>：检测器只报数据、逐句定位，不下「是不是 AI 写的」结论。<br>
+    评分是「AI 味浓度」参考，不是鉴定；改写交给 AI 执行，保证不误伤剧情人设。
+  </footer>
+</div>
+
+<script src="data.js"></script>
+<script src="detector.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var DATA = window.DEAI_DATA;
+
+  /* 示例文本从 data.js 读取（由 build_data.py 从 samples/demo_ai_flavor.txt 生成），
+     禁止在此手抄——手抄会导致网页数字与 CLI 对不上。 */
+  var DEMO = (DATA && DATA.demoText) || '';
+
+  function esc(s){
+    return String(s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function render(text){
+    // 对齐 Python 的 universal newlines：\r\n 与孤立 \r 一律归一成 \n
+    text = text.replace(/\r\n?/g, '\n');
+    var t0 = performance.now();
+    var r = window.DEAI.scan(text, DATA);
+    var ms = Math.round(performance.now() - t0);
+    var f = r.findings, m = r.metrics;
+
+    $('score').innerHTML = r.score + '<small>/100</small>';
+    var color = r.score < 20 ? 'var(--ok)' : r.score < 40 ? '#a3e635'
+              : r.score < 60 ? 'var(--p1)' : 'var(--p0)';
+    $('score').style.color = color;
+    $('verdict').textContent = r.verdict;
+    $('verdict').style.color = color;
+    $('marker').style.left = Math.max(0, Math.min(100, r.score)) + '%';
+    $('hint').textContent = '共命中 ' + f.length + ' 处，用时 ' + ms + ' ms。'
+      + (r.score >= 40 ? '建议按下面清单逐条处理后再发。' : '整体节奏不错，按清单微调即可。');
+
+    var mrows = [
+      ['句数 / 平均句长', m.sentence_count + ' 句 / ' + m.avg_sentence_len + ' 字'],
+      ['句长变异系数', m.sentence_cv + (m.sentence_cv < 0.35 && m.sentence_count >= 5 ? '  ← 偏均匀' : '')],
+      ['段落数 / 段落变异系数', m.paragraph_count + ' / ' + m.para_cv],
+      ['破折号（网文建议 &lt;2）', m.dash_per_1k + ' /千字'],
+      ['省略号', m.ellipsis_per_1k + ' /千字'],
+      ['感叹号 / 问号', m.exclaim_per_1k + ' / ' + m.question_per_1k + ' /千字'],
+      ['超长无标点片段', m.overlong_run_20plus + ' 处（最长 ' + m.max_hanzi_run + ' 字）'],
+      ['句号密度', m.period_per_100 + ' /百字']
+    ];
+    $('metrics').innerHTML = mrows.map(function(row){
+      var warn = row[1].indexOf('←') >= 0 ? ' class="warn"' : '';
+      return '<tr><td>' + row[0] + '</td><td' + warn + '>' + row[1] + '</td></tr>';
+    }).join('');
+
+    var groups = {P0:[],P1:[],P2:[]};
+    f.forEach(function(x){ (groups[x.severity] = groups[x.severity] || []).push(x); });
+    var titles = {P0:'P0 · 可信度杀手', P1:'P1 · 明显 AI 味', P2:'P2 · 风格打磨'};
+    var cols = {P0:'var(--p0)', P1:'var(--p1)', P2:'var(--p2)'};
+    var html = '';
+    ['P0','P1','P2'].forEach(function(sev){
+      var arr = groups[sev] || [];
+      if (!arr.length) return;
+      html += '<h2><span class="dot" style="background:' + cols[sev] + '"></span>'
+            + titles[sev] + '（' + arr.length + ' 处）</h2><div class="panel">';
+      arr.slice(0, 40).forEach(function(x){
+        html += '<div class="find ' + sev.toLowerCase() + '">'
+              + '<div class="cat">' + esc(x.category) + '</div>'
+              + '<div class="txt">' + esc(x.text.slice(0, 90)) + '</div>'
+              + (x.suggestion ? '<div class="sug">→ ' + esc(x.suggestion) + '</div>' : '')
+              + '</div>';
+      });
+      if (arr.length > 40) html += '<div class="more">…其余 ' + (arr.length - 40) + ' 处略</div>';
+      html += '</div>';
+    });
+    $('findings').innerHTML = html;
+    $('prompt').textContent = buildPrompt(f, m, r.score);
+    $('result').style.display = 'block';
+    $('err').textContent = '';
+  }
+
+  /* 与 src/report.py 的 _build_prompt 保持一致 */
+  function buildPrompt(f, m, score){
+    var g = {P0:[],P1:[],P2:[]};
+    f.forEach(function(x){ (g[x.severity] = g[x.severity] || []).push(x); });
+    var L = [];
+    L.push('你是网文去 AI 味编辑。下面是一段网文正文，请去掉它的 AI 味，让它读起来像真人网文作者写的。');
+    L.push('');
+    L.push('【红线】不改剧情走向、不改人设、不改世界观、不改分镜、不 OOC；不改事实和专名；长度浮动不超过 ±20%。');
+    L.push('');
+    L.push('【去味原则】');
+    L.push('1. 删掉 AI 味连接词、赋能系词、空洞程度副词、名词化套壳（进行优化→优化）。');
+    L.push('2. 情绪不要直说，用神态/动作/生理反应演出来；抽象主语（时代/命运/现实）换成具体的人或场景。');
+    L.push('3. 拆掉排比三件套和金句升华收尾；句子长短交错，别每句一样长。');
+    L.push('4. 对话口语化、符合人设语气；标点收敛（破折号近零、省略号限用）。');
+    L.push('5. 缺具体细节的地方，用画面/动作/对话补，别堆形容词。');
+    L.push('');
+    if (g.P0.length || g.P1.length){
+      L.push('【具体要处理的问题句】（按优先级）');
+      ['P0','P1'].forEach(function(sev){
+        g[sev].slice(0, 20).forEach(function(x){
+          L.push('- [' + x.category + ']「' + x.text.slice(0, 40) + '」→ ' + (x.suggestion || '删或改写'));
+        });
+      });
+      L.push('');
+    }
+    if (g.P2.length){
+      L.push('【次要打磨】');
+      g.P2.slice(0, 15).forEach(function(x){
+        L.push('- [' + x.category + ']「' + x.text.slice(0, 40) + '」→ ' + (x.suggestion || '精简'));
+      });
+      L.push('');
+    }
+    L.push('只输出改写后的正文，不要解释。');
+    return L.join('\n');
+  }
+
+  var input = $('input');
+  function updateCount(){
+    $('count').textContent = input.value.replace(/\s/g,'').length + ' 字';
+  }
+  input.addEventListener('input', updateCount);
+
+  $('btn').addEventListener('click', function(){
+    var v = input.value.trim();
+    if (!v){ $('err').textContent = '请先粘贴正文。'; $('result').style.display='none'; return; }
+    if (v.replace(/\s/g,'').length < 30){
+      $('err').textContent = '文本太短（少于 30 字），统计指标会失真，建议贴 1-3 章。';
+    }
+    try { render(v); }
+    catch(e){ $('err').textContent = '检测出错：' + e.message; }
+  });
+  $('btn-demo').addEventListener('click', function(){
+    input.value = DEMO; updateCount(); render(DEMO);
+    $('result').scrollIntoView({behavior:'smooth'});
+  });
+  $('btn-clear').addEventListener('click', function(){
+    input.value = ''; updateCount(); $('result').style.display='none'; $('err').textContent='';
+  });
+  $('btn-copy').addEventListener('click', function(){
+    var txt = $('prompt').textContent;
+    var done = function(){
+      $('copied').classList.add('show');
+      setTimeout(function(){ $('copied').classList.remove('show'); }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done, function(){ fallback(txt, done); });
+    } else { fallback(txt, done); }
+  });
+  function fallback(txt, cb){
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); cb(); } catch(e){}
+    document.body.removeChild(ta);
+  }
+})();
+</script>
+</body>
+</html>
