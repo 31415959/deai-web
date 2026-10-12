@@ -108,7 +108,7 @@
   <header>
     <h1>AI 味<span>体检</span></h1>
     <div class="sub">粘贴网文正文 → 评分 + 逐处定位 + 去味改写 Prompt</div>
-    <div class="badge">纯本地运行 · 不上传服务器</div>
+    <div class="badge">正文不出浏览器 · 检测全在本地</div>
   </header>
 
   <div class="panel">
@@ -153,9 +153,24 @@
 
   <footer>
     <b>说明</b>：检测器只报数据、逐句定位，不下「是不是 AI 写的」结论。<br>
-    评分是「AI 味浓度」参考，不是鉴定；改写交给 AI 执行，保证不误伤剧情人设。
+    评分是「AI 味浓度」参考，不是鉴定；改写交给 AI 执行，保证不误伤剧情人设。<br>
+    <span style="color:var(--dim2)">你粘贴的正文不会离开浏览器；页面仅统计访问量（GoatCounter，无 Cookie）。</span>
   </footer>
 </div>
+
+<!-- 访问量统计：只记页面访问，不接触正文内容。
+     用 async 且失败静默 —— 统计域名在部分网络下不可达，绝不能拖慢或影响检测功能。 -->
+<script>
+  window.goatcounter = {
+    no_onload: false,
+    allow_local: false,
+    // 加载失败时静默，不抛错、不阻塞
+    on_error: function () {}
+  };
+</script>
+<script data-goatcounter="https://deai-web.goatcounter.com/count"
+        async src="https://gc.zgo.at/count.js"
+        onerror="void 0"></script>
 
 <script src="data.js"></script>
 <script src="detector.js"></script>
